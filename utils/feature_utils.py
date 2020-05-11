@@ -34,22 +34,27 @@ def w2v(log, pivot_key, out_key, flag, size=64):
     """
     print('word2vec %s on %s' % (out_key, pivot_key))
     # Fetch sentences
-    sentences = log[out_key].values
+    sentences = []
+    content = log[out_key].values
+    for s in content:
+        words = s.split(',')
+        if '' in words:
+            words.remove('')
+        sentences.append(words)
+
+    # Build Word Bag
+    values = []
+    for i in sentences:
+        values.extend(i)
+    values = set(values)
 
     # Train Word2Vec Model
     print('training...')
     random.shuffle(sentences)
     model = Word2Vec(sentences, size=size, window=10, min_count=1, workers=10, iter=10)
 
-    # Build Word Bag
-    values = []
-    for s in sentences:
-        words = s.split(',')
-        values.extend(words)
-
     # Output
     print('outputing...')
-    values = set(values)
     w2v = []
     for v in values:
         try:
@@ -559,6 +564,7 @@ if __name__ == "__main__":
     print('preprocess test_log')
     test_log = preprocess(is_train=False, log_path='test_log.pkl')
     log = pd.concat([train_log, test_log])
+    log.reset_index(drop=True, inplace=True)
     flag = 'test'
 
     w2v(log, 'user_id', 'creative_id', flag, 64)

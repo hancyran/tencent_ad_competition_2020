@@ -217,11 +217,15 @@ def split_dataset(log):
     return train_log, val_log
 
 
-def read_all_feature_data():
+def read_all_feature_data(is_test=True):
     """
     Read All data
 
     """
+    if is_test:
+        train_log = preprocess(log_path='train_log.pkl')
+        test_log = preprocess(is_train=False, log_path='test_log.pkl')
+
 
 
 if __name__ == '__main__':
