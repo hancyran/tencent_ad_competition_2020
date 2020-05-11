@@ -60,8 +60,8 @@ utils.print_hparams(hparam)
 ####################################################################################
 
 # read data
-user_log = preprocess()
-
+train_log = preprocess(log_path='train_log.pkl')
+test_log = preprocess(is_train=False, log_path='test_log.pkl')
 
 ####################################################################################
 
@@ -85,8 +85,6 @@ print("*" * 80)
 ####################################################################################
 
 # test
-print(test.shape)
-print(train.shape)
 scaler = preprocessing.MinMaxScaler(feature_range=(0, 8))
 scaler.fit(train[['imp']])
 hparam.train_scaler = scaler

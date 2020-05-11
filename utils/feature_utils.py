@@ -15,6 +15,7 @@ from tqdm import tqdm
 import time
 
 import sys
+
 sys.path.extend('../')
 
 from utils.data_utils import preprocess
@@ -31,6 +32,7 @@ def w2v(log, pivot_key, out_key, flag, size=64):
     Walk2Vector Algorithm for Embedding
 
     """
+    print('word2vec %s on %s' % (out_key, pivot_key))
     # Fetch sentences
     sentences = log[out_key].values
 
@@ -58,12 +60,14 @@ def w2v(log, pivot_key, out_key, flag, size=64):
             pass
 
     # Save
+    print('saving...')
     out_df = pd.DataFrame(w2v)
     names = [out_key]
     for i in range(size):
         names.append(pivot_key + '_w2v_embedding_' + out_key + '_' + str(size) + '_' + str(i))
     out_df.columns = names
-    out_df.to_pickle(cfg['data_path'] + pivot_key + '_' + out_key + '_' + flag + '_w2v_' + str(size) + '.pkl')
+    out_df.to_pickle(
+        os.path.join(cfg['data_path'], pivot_key + '_' + out_key + '_' + flag + '_w2v_' + str(size) + '.pkl'))
 
 
 def deepwalk(log, pivot_key, out_key, flag, size):
@@ -72,7 +76,7 @@ def deepwalk(log, pivot_key, out_key, flag, size):
 
     TODO Fix / Test
     """
-    print("deepwalk:", pivot_key, out_key)
+    print('deepwalk %s on %s' % (out_key, pivot_key))
     # 构建图
     dic = {}
     for item in log[[pivot_key, out_key]].values:
@@ -550,7 +554,9 @@ if __name__ == "__main__":
     #     gc.collect()
 
     # Word2vec
+    print('preprocess train_log')
     train_log = preprocess(log_path='train_log.pkl')
+    print('preprocess test_log')
     test_log = preprocess(is_train=False, log_path='test_log.pkl')
     log = pd.concat([train_log, test_log])
     flag = 'test'
