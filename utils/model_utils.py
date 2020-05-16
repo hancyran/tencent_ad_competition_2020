@@ -1,20 +1,17 @@
-from model import fm
-from model import ffm
-from model import nffm
-from model import xdeepfm
+from model import CIN, xdeepfm, BiLstm, AttBiLstm
 import tensorflow as tf
 
 
 def build_model(hparams):
     tf.reset_default_graph()
-    if hparams.model == 'fm':
-        model = fm.Model(hparams)
-    elif hparams.model == 'ffm':
-        model = ffm.Model(hparams)
-    elif hparams.model == 'nffm':
-        model = nffm.Model(hparams)
-    elif hparams.model == 'xdeepfm':
-        model = xdeepfm.Model(hparams)
+    if hparams.model == 'CIN':
+        model = CIN.Model(hparams)
+    elif hparams.model == 'BiLstm':
+        model = BiLstm.Model(hparams)
+    elif hparams.model == 'AttBiLstm':
+        model = AttBiLstm.Model(hparams)
+    elif hparams.model == 'bert':
+        model = AttBiLstm.Model(hparams)
     else:
         raise Exception('[!] No Such Type of Model')
 

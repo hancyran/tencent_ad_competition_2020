@@ -1,23 +1,21 @@
 """define base class model"""
 import abc
-import math
+
 import tensorflow as tf
-from sklearn import metrics
 import os
 import utils.misc_utils as utils
 import numpy as np
 from tensorflow.contrib.layers.python.layers import batch_norm as batch_norm
 import time
 from tqdm import tqdm
-import pandas as pd
-from sklearn import preprocessing
 
 __all__ = ["BaseModel"]
 
 
 class BaseModel(object):
     def __init__(self, hparams, scope=None):
-        tf.set_random_seed(1234)
+        tf.set_random_seed(hparams.seed)
+        self.hparams = hparams
 
     @abc.abstractmethod
     def _build_graph(self, hparams):
@@ -25,6 +23,10 @@ class BaseModel(object):
         pass
 
     def _get_initializer(self, hparams):
+        """
+        Variable Initializer
+
+        """
         if hparams.init_method == 'tnormal':
             return tf.truncated_normal_initializer(stddev=hparams.init_value)
         elif hparams.init_method == 'uniform':
@@ -45,6 +47,11 @@ class BaseModel(object):
             return tf.truncated_normal_initializer(stddev=hparams.init_value)
 
     def _build_train_opt(self, hparams):
+        """
+        Optimizer
+
+        """
+
         def train_opt(hparams):
             if hparams.optimizer == 'adadelta':
                 train_step = tf.train.AdadeltaOptimizer( \
@@ -86,6 +93,10 @@ class BaseModel(object):
         return logit
 
     def _activate(self, logit, activation):
+        """
+        Activation Layer
+
+        """
         if activation == 'sigmoid':
             return tf.nn.sigmoid(logit)
         elif activation == 'softmax':
@@ -102,14 +113,18 @@ class BaseModel(object):
             raise ValueError("this activations not defined {0}".format(activation))
 
     def _dropout(self, logit, layer_idx):
+        """
+        Dropout Layer
+
+        """
         logit = tf.nn.dropout(x=logit, keep_prob=self.layer_keeps[layer_idx])
         return logit
 
-    def reload(self):
-        hparams = self.hparams
-        self.saver.restore(self.sess, 'model_tmp/model' + hparams.model_name)
-
     def batch_norm_layer(self, x, train_phase, scope_bn):
+        """
+        Norm Layer
+
+        """
         z = tf.cond(train_phase, lambda: batch_norm(x, decay=self.hparams.batch_norm_decay, center=True, scale=True,
                                                     updates_collections=None, is_training=True, reuse=None,
                                                     trainable=True, scope=scope_bn),
@@ -119,6 +134,10 @@ class BaseModel(object):
         return z
 
     def optimizer(self, hparams):
+        """
+        Build Optimizer
+
+        """
         opt = self._build_train_opt(hparams)
         params = tf.trainable_variables()
         gradients = tf.gradients(self.loss, params, colocate_gradients_with_ops=True)
@@ -129,191 +148,237 @@ class BaseModel(object):
     # =======================================================================================================================
     # =======================================================================================================================
 
-    def train(self, train, dev):
+    @property
+    def model_dir(self):
+        return "{}".format(self.hparams.model_name)
+
+    def save(self, checkpoint_dir, step):
+        model_name = "RAN.model"
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+
+        self.saver.save(self.sess, os.path.join(checkpoint_dir, model_name), global_step=step)
+
+    def load(self, checkpoint_dir):
+        import re
+        print(" [*] Reading checkpoints...")
+        checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            counter = int(next(re.finditer("(\d+)(?!.*\d)", ckpt_name)).group(0))
+            print(" [*] Success to read {}".format(ckpt_name))
+            return True, counter
+        else:
+            print(" [*] Failed to find a checkpoint")
+            return False, 0
+
+    # =======================================================================================================================
+    # =======================================================================================================================
+
+    def train(self, train, dev, is_val=False):
+        """
+        Train Model
+
+        """
+        # init
         hparams = self.hparams
         sess = self.sess
-        train_single_features = train[hparams.single_features].values
-        train_label = train[[hparams.label]].values
+
+        # fetch data
+        if hparams.single_features is not None:
+            train_single_features = train[hparams.single_features].values
+        if hparams.label is not None:
+            train_label = train[hparams.label].values
         if hparams.multi_features is not None:
             train_multi_features = train[hparams.multi_features].values
         if hparams.dense_features is not None:
             train_dense_features = train[hparams.dense_features].values
         if hparams.kv_features is not None:
             train_kv_features = train[hparams.kv_features].values
-
         if hparams.cross_features is not None:
             train_cross_features = train[hparams.cross_features].values
+
+        # start training
+        print('Start Train')
         for epoch in range(hparams.epoch):
             info = {}
             info['loss'] = []
             info['norm'] = []
             start_time = time.time()
+
+            # shuffle
+            train.sample(frac=1)
+            # each batch
             for idx in range(len(train) // hparams.batch_size + 3):
                 if idx * hparams.batch_size >= len(train):
                     T = (time.time() - start_time)
                     break
                 feed_dic = {}
+
+                # single_features
                 if hparams.single_features is not None:
-                    single_batch = train_single_features[
-                                   idx * hparams.batch_size:min((idx + 1) * hparams.batch_size, len(train))]
+                    single_batch = \
+                        train_single_features[idx * hparams.batch_size:min((idx + 1) * hparams.batch_size, len(train))]
                     single_batch = utils.hash_single_batch(single_batch, hparams)
                     feed_dic[self.single_features] = single_batch
 
+                # multi_features
                 if hparams.multi_features is not None:
-                    multi_batch = train_multi_features[
-                                  idx * hparams.batch_size:min((idx + 1) * hparams.batch_size, len(train))]
+                    multi_batch = \
+                        train_multi_features[idx * hparams.batch_size:min((idx + 1) * hparams.batch_size, len(train))]
                     multi_batch, multi_weights = utils.hash_multi_batch(multi_batch, hparams)
                     feed_dic[self.multi_features] = multi_batch
                     feed_dic[self.multi_weights] = multi_weights
 
+                # dense_features
                 if hparams.dense_features is not None:
-                    feed_dic[self.dense_features] = train_dense_features[idx * hparams.batch_size: \
-                                                                         min((idx + 1) * hparams.batch_size,
-                                                                             len(train))]
-                if hparams.kv_features is not None:
-                    feed_dic[self.kv_features] = train_kv_features[idx * hparams.batch_size: \
-                                                                   min((idx + 1) * hparams.batch_size, len(train))]
+                    feed_dic[self.dense_features] = \
+                        train_dense_features[idx * hparams.batch_size: min((idx + 1) * hparams.batch_size, len(train))]
 
+                # kv_features
+                if hparams.kv_features is not None:
+                    feed_dic[self.kv_features] = \
+                        train_kv_features[idx * hparams.batch_size: min((idx + 1) * hparams.batch_size, len(train))]
+
+                # cross_features
                 if hparams.cross_features is not None:
-                    cross_batch = train_cross_features[
-                                  idx * hparams.batch_size:min((idx + 1) * hparams.batch_size, len(train))]
+                    cross_batch = \
+                        train_cross_features[idx * hparams.batch_size:min((idx + 1) * hparams.batch_size, len(train))]
                     cross_batch = utils.hash_single_batch(cross_batch, hparams)
                     feed_dic[self.cross_features] = cross_batch
+
+                # label
                 label = train_label[idx * hparams.batch_size: min((idx + 1) * hparams.batch_size, len(train))]
-                label = hparams.train_scaler.transform(label)[:, 0]
                 feed_dic[self.label] = label
+
+                # setting
                 feed_dic[self.use_norm] = True
-                loss, _, norm = sess.run([self.score, self.update, self.grad_norm], feed_dict=feed_dic)
+
+                # train a batch
+                loss, _, norm, preds = sess.run([self.loss, self.update, self.grad_norm, self.fake_label],
+                                                feed_dict=feed_dic)
 
                 info['loss'].append(loss)
                 info['norm'].append(norm)
+
+                # show results
                 if (idx + 1) % hparams.num_display_steps == 0:
                     info['learning_rate'] = hparams.learning_rate
                     info["train_ppl"] = np.mean(info['loss'])
                     info["avg_grad_norm"] = np.mean(info['norm'])
+
+                    # accuracy
+                    # tmp_train = output_labels(train, preds)
+                    # age_acc = sum((tmp_train.age == tmp_train.predicted_age).astype(np.int)) / len(tmp_train)
+                    # gender_acc = sum((tmp_train.gender == tmp_train.predicted_gender).astype(np.int)) / len(tmp_train)
+                    # info["age_acc"] = age_acc
+                    # info["gender_acc"] = gender_acc
+
+                    # print
                     utils.print_step_info("  ", epoch, idx + 1, info)
+
+                    # clear
                     del info
                     info = {}
                     info['loss'] = []
                     info['norm'] = []
-                if (idx + 1) % hparams.num_eval_steps == 0:
-                    T = (time.time() - start_time)
-                    if dev is not None:
-                        self.eval(T, dev, hparams, sess)
-        if dev is not None:
-            return self.eval(T, dev, hparams, sess)
-        else:
-            return
+
+                # save model
+                if (idx + 1) % hparams.num_save_steps == 0:
+                    self.save(hparams.checkpoint_dir, (idx + 1))
+
+                # evaluate model
+                # if (idx + 1) % hparams.num_eval_steps == 0:
+                #     self.evaluate()
+
+        print('Finish Train')
 
     # =======================================================================================================================
     # =======================================================================================================================
 
     def infer(self, dev):
+        """
+        Infer with Pretrained Model
+
+        """
+        # init 
         hparams = self.hparams
         sess = self.sess
+
         preds = []
-        total_loss = []
         a = hparams.batch_size
         hparams.batch_size = hparams.infer_batch_size
-        dev_single_features = dev[hparams.single_features].values
+
+        # fetch data
+        if hparams.single_features is not None:
+            dev_single_features = dev[hparams.single_features].values
         if hparams.multi_features is not None:
             dev_multi_features = dev[hparams.multi_features].values
         if hparams.dense_features is not None:
             dev_dense_features = dev[hparams.dense_features].values
         if hparams.kv_features is not None:
             dev_kv_features = dev[hparams.kv_features].values
-
         if hparams.cross_features is not None:
             dev_cross_features = dev[hparams.cross_features].values
 
+        # start inference
+        print('Start Infer')
         for idx in tqdm(range(len(dev) // hparams.batch_size + 1), total=len(dev) // hparams.batch_size + 1):
-            single_batch = dev_single_features[idx * hparams.batch_size:min((idx + 1) * hparams.batch_size, len(dev))]
+
+            single_batch = dev_multi_features[idx * hparams.batch_size:min((idx + 1) * hparams.batch_size, len(dev))]
             if len(single_batch) == 0:
                 break
-            feed_dic = {}
-            feed_dic[self.use_norm] = False
 
+            feed_dic = {}
+
+            # single_features
             if hparams.single_features is not None:
+                single_batch = \
+                    dev_single_features[idx * hparams.batch_size:min((idx + 1) * hparams.batch_size, len(dev))]
                 single_batch = utils.hash_single_batch(single_batch, hparams)
                 feed_dic[self.single_features] = single_batch
 
+            # multi_features
             if hparams.multi_features is not None:
-                multi_batch = dev_multi_features[idx * hparams.batch_size:min((idx + 1) * hparams.batch_size, len(dev))]
+                multi_batch = \
+                    dev_multi_features[idx * hparams.batch_size:min((idx + 1) * hparams.batch_size, len(dev))]
                 multi_batch, multi_weights = utils.hash_multi_batch(multi_batch, hparams)
                 feed_dic[self.multi_features] = multi_batch
                 feed_dic[self.multi_weights] = multi_weights
-            if hparams.dense_features is not None:
-                feed_dic[self.dense_features] = dev_dense_features[idx * hparams.batch_size: \
-                                                                   min((idx + 1) * hparams.batch_size, len(dev))]
-            if hparams.kv_features is not None:
-                feed_dic[self.kv_features] = dev_kv_features[idx * hparams.batch_size: \
-                                                             min((idx + 1) * hparams.batch_size, len(dev))]
 
+            # dense_features
+            if hparams.dense_features is not None:
+                feed_dic[self.dense_features] = \
+                    dev_dense_features[idx * hparams.batch_size: min((idx + 1) * hparams.batch_size, len(dev))]
+
+            # kv_features
+            if hparams.kv_features is not None:
+                feed_dic[self.kv_features] = \
+                    dev_kv_features[idx * hparams.batch_size: min((idx + 1) * hparams.batch_size, len(dev))]
+
+            # cross_features
             if hparams.cross_features is not None:
-                cross_batch = dev_cross_features[idx * hparams.batch_size:min((idx + 1) * hparams.batch_size, len(dev))]
+                cross_batch = \
+                    dev_cross_features[idx * hparams.batch_size:min((idx + 1) * hparams.batch_size, len(dev))]
                 cross_batch = utils.hash_single_batch(cross_batch, hparams)
                 feed_dic[self.cross_features] = cross_batch
+
+            # setting
             feed_dic[self.use_norm] = False
-            pred = sess.run(self.val, feed_dict=feed_dic)
+
+            # infer a batch
+            pred = sess.run(self.fake_label, feed_dict=feed_dic)
+
             preds.append(pred)
+
+        print('Finish Infer')
         preds = np.concatenate(preds)
-        dev['temp'] = preds
-        preds = hparams.test_scaler.inverse_transform(dev[['temp']])[:, 0]
-        del dev['temp']
+        # dev['temp'] = preds
         hparams.batch_size = a
+
         return preds
-
-    # =======================================================================================================================
-    # =======================================================================================================================
-
-    def eval(self, T, dev, hparams, sess):
-        preds = self.infer(dev)
-        dev['predict_imp'] = preds
-
-        dev['rank'] = dev[['aid', 'bid']].groupby('aid')['bid'].apply(
-            lambda row: pd.Series(dict(zip(row.index, row.rank())))) - 1
-        dev['predict_imp'] = dev['predict_imp'].apply(lambda x: np.exp(x) - 1)
-        dev['predict_imp'] = dev['predict_imp'].apply(round)
-        dev['predict_imp'] = dev['predict_imp'].apply(lambda x: 0 if x < 0 else x)
-        dev['predict_imp'] = dev['predict_imp'] + dev['rank'] * 0.0001
-
-        dev['predict_imp'] = dev['predict_imp'].apply(lambda x: round(x, 4))
-        gold_dev = dev[dev['gold'] == True]
-        score = abs(gold_dev['gold_imp'] - gold_dev['predict_imp']) / (
-                (gold_dev['gold_imp'] + gold_dev['predict_imp']) / 2 + 1e-15)
-        SMAPE = score.mean()
-
-        try:
-            last_aid = None
-            gold_imp = None
-            gold_bid = None
-            s = None
-            score = []
-            for item in dev[['aid', 'bid', 'predict_imp']].values:
-                item = list(item)
-                if item[0] != last_aid:
-                    last_aid = item[0]
-                    gold_bid = item[1]
-                    gold_imp = item[2]
-                    if s is not None:
-                        score.append(s / cont)
-                    s = 0
-                    cont = 0
-                else:
-                    if (gold_imp - item[2]) * (gold_bid - item[1]) == 0:
-                        s += -1
-                    else:
-                        s += ((gold_imp - item[2]) * (gold_bid - item[1])) / (
-                            abs(((gold_imp - item[2]) * (gold_bid - item[1]))))
-                    cont += 1
-
-            MonoScore = np.mean(score)
-            score = 0.4 * (1 - SMAPE / 2) + 0.6 * (MonoScore + 1) / 2
-        except:
-            MonoScore = 0
-
-        if SMAPE < self.best_score:
-            self.best_score = SMAPE
-        utils.print_out(("# Epcho-time %.2fs AVG %.4f. Eval SMAPE %.4f. #Eval MonoScore %.4f. Best Score %.4f") % (
-            T, dev['predict_imp'].mean(), SMAPE, MonoScore, self.best_score))
-        return SMAPE

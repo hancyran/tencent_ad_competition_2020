@@ -40,7 +40,8 @@ def hash_multi_batch(batch, hparams):
     lengths = 0
     for b in batch:
         for i in range(len(b)):
-            b[i] = [abs(hash('key_' + str(i) + ' value_' + str(x))) % hparams.multi_hash_num for x in str(b[i]).split()]
+            b[i] = [abs(hash('key_' + str(i) + ' value_' + str(x))) % hparams.multi_hash_num for x in
+                    str(b[i]).split(',')]
             lengths = max(lengths, len(b[i]))
             if len(b[i]) == 0:
                 b[i] = [abs(hash('key_' + str(i) + ' value_' + str('<pad>'))) % hparams.multi_hash_num]
@@ -85,7 +86,7 @@ def print_out(s, f=None, new_line=True):
 
 
 def print_step_info(prefix, epoch, global_step, info):
-    print_out("%sepoch %d step %d lr %g loss %.6f gN %.2f, %s" %
+    print_out("%s epoch %d step %d lr %g loss %.6f gN %.2f, %s" %
               (prefix, epoch, global_step, info["learning_rate"],
                info["train_ppl"], info["avg_grad_norm"], time.ctime()))
 

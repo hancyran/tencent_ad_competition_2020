@@ -14,24 +14,82 @@ from pandas import DataFrame, Series
 from tqdm import tqdm
 import time
 
-import sys
-
-sys.path.extend('../')
+# import sys
+# sys.path.extend('../')
 
 from utils.data_utils import preprocess
+from utils.config_utils import Config
 
-with open('default_config.json', 'r') as fh:
-    cfg = json.load(fh)
+from sklearn.feature_extraction.text import TfidfVectorizer
 
-np.random.seed(cfg['seed'])
-random.seed(cfg['seed'])
+cfg = Config()
+
+np.random.seed(cfg.seed)
+random.seed(cfg.seed)
+
+"""
+Feature Extraction Tools
+
+TF-IDF + W2V + Multi-label + Onehot
+
+"""
 
 
-def w2v(log, pivot_key, out_key, flag, size=64):
+def tfidf(log, pivot_key, out_key, flag, max_df=0.99, min_df=0):
+    """
+    TF-IDF Features
+
+    TODO scaling size
+    """
+    # Fetch sentences
+    sentences = []
+    content = log[out_key].values
+    for s in content:
+        words = s.split(',')
+        if '' in words:
+            words.remove('')
+        sentences.append(words)
+
+    model = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b", max_df=max_df, min_df=min_df).fit(sentences)
+
+    # Output
+    tfidf_results = model.transform(sentences).toarray()
+
+    # Save
+    print('saving...')
+    out_df = pd.DataFrame(tfidf_results)
+    names = [out_key]
+    size = len(tfidf_results)
+    print('Total Size: %d' % size)
+    for i in range(size):
+        names.append(pivot_key + '_tfidf_embedding_' + out_key + '_' + str(i))
+    out_df.columns = names
+    out_df.to_pickle(
+        os.path.join(cfg.data_path, pivot_key + '_' + out_key + '_' + flag + '_tfidf.pkl'))
+
+
+def w2v(log, pivot_key, out_key, flag, size=128, window=10, iter=10):
     """
     Walk2Vector Algorithm for Embedding
+    window - 10
+    window - 5
 
+    Features:
+    product_category_embedding
+    industry_embedding
+    advertiser_id_embedding
+    product_id_embedding
+    ad_id_embedding
+    (Deprecated)creative_id_embedding
+
+    (Deprecated)ad_id_creative_id_embedding
+    TODO product_category_industry_embedding
+    TODO industry_advertiser_id_embedding
+    TODO product_category_product_id_embedding
+
+    TODO apply to data without droping duplicate words
     """
+
     print('word2vec %s on %s' % (out_key, pivot_key))
     # Fetch sentences
     sentences = []
@@ -51,7 +109,7 @@ def w2v(log, pivot_key, out_key, flag, size=64):
     # Train Word2Vec Model
     print('training...')
     random.shuffle(sentences)
-    model = Word2Vec(sentences, size=size, window=10, min_count=1, workers=10, iter=10)
+    model = Word2Vec(sentences, size=size, window=window, min_count=1, workers=10, iter=iter)
 
     # Output
     print('outputing...')
@@ -72,7 +130,8 @@ def w2v(log, pivot_key, out_key, flag, size=64):
         names.append(pivot_key + '_w2v_embedding_' + out_key + '_' + str(size) + '_' + str(i))
     out_df.columns = names
     out_df.to_pickle(
-        os.path.join(cfg['data_path'], pivot_key + '_' + out_key + '_' + flag + '_w2v_' + str(size) + '.pkl'))
+        os.path.join(cfg.data_path,
+                     pivot_key + '_' + out_key + '_' + flag + '_w2v_' + str(size) + '_window_' + str(window) + '.pkl'))
 
 
 def deepwalk(log, pivot_key, out_key, flag, size):
@@ -162,6 +221,15 @@ def deepwalk(log, pivot_key, out_key, flag, size):
     print(out_df.head())
     out_df.to_pickle(
         'data/' + pivot_key + '_' + out_key + '_' + out_key + '_' + flag + '_deepwalk_' + str(size) + '.pkl')
+
+
+def gae_encode(log, pivot_key, out_key, flag, size):
+    """
+    Graph AutoEncoder Embedding
+
+    TODO Apply it!
+    """
+    return
 
 
 def get_agg_features(train_df, test_df, pivot_key, out_key, agg, log=None):
@@ -450,6 +518,10 @@ def history(train_df, test_df, log, pivot_key, minor_key):
 
 class Features:
     def __init__(self):
+        # label
+        self.label_features = ['label_' + str(i) for i in range(1)]  # gender
+        # self.label_features = ['label_' + str(i) for i in range(4)]  # age
+
         # embedding
         self.single_features = []
 
@@ -457,15 +529,38 @@ class Features:
         self.cross_features = []
 
         # fm
-        self.multi_features = ['creative_id', 'ad_id', 'product_id', 'product_category', 'advertiser_id', 'industry']
+        # normal feats
+        self.multi_features = ['ad_id', 'product_id', 'product_category', 'advertiser_id', 'industry']
+
+        # click_times topN feats
+        # self.multi_features += ['product_category_click_top3', 'product_category_click_top6']
+        # self.multi_features += ['industry_click_top3', 'industry_click_top6', 'industry_click_top10']
+        # self.multi_features += ['advertiser_id_click_top2', 'advertiser_id_click_top5', 'advertiser_id_click_top10']
+        # self.multi_features += ['product_id_click_top5', 'product_id_click_top9', 'product_id_click_top15']
+        # self.multi_features += ['ad_id_click_top2', 'ad_id_click_top8']
+        # self.multi_features += ['creative_id_click_top6', 'creative_id_click_top10']
+
+        # onehot feats
+        self.multi_features += ['product_category_onehot', 'industry_onehot']
 
         # word2vec
-        self.dense_features = ['user_id_w2v_embedding_creative_id_64_' + str(i) for i in range(64)] + \
-                              ['user_id_w2v_embedding_ad_id_64_' + str(i) for i in range(64)] + \
-                              ['user_id_w2v_embedding_product_id_64_' + str(i) for i in range(64)] + \
-                              ['user_id_w2v_embedding_product_category_64_' + str(i) for i in range(64)] + \
-                              ['user_id_w2v_embedding_advertiser_id_64_' + str(i) for i in range(64)] + \
-                              ['user_id_w2v_embedding_industry_64_' + str(i) for i in range(64)]
+        self.dense_features = ['user_id_w2v_embedding_ad_id_128_' + str(i) for i in range(128)] + \
+                              ['user_id_w2v_embedding_product_id_128_' + str(i) for i in range(128)] + \
+                              ['user_id_w2v_embedding_product_category_128_' + str(i) for i in range(128)] + \
+                              ['user_id_w2v_embedding_advertiser_id_128_' + str(i) for i in range(128)] + \
+                              ['user_id_w2v_embedding_industry_128_' + str(i) for i in range(128)]
+
+        self.dense_features += ['user_id_tfidf_embedding_ad_id_' + str(i) for i in range(64)] + \
+                               ['user_id_tfidf_embedding_product_id_' + str(i) for i in range(64)] + \
+                               ['user_id_tfidf_embedding_product_category_' + str(i) for i in range(64)] + \
+                               ['user_id_tfidf_embedding_advertiser_id_' + str(i) for i in range(64)] + \
+                               ['user_id_tfidf_embedding_industry_' + str(i) for i in range(64)]
+
+        # self.dense_features += ['user_id_w2v_embedding_ad_id_64_' + str(i) for i in range(64)] + \
+        #                        ['user_id_w2v_embedding_product_id_64_' + str(i) for i in range(64)] + \
+        #                        ['user_id_w2v_embedding_product_category_64_' + str(i) for i in range(64)] + \
+        #                        ['user_id_w2v_embedding_advertiser_id_64_' + str(i) for i in range(64)] + \
+        #                        ['user_id_w2v_embedding_industry_64_' + str(i) for i in range(64)]
 
         # deep walk
         # self.dense_features += ['user_id_deepwalk_embedding_creative_id_64_' + str(i) for i in range(64)] + \
@@ -560,16 +655,28 @@ if __name__ == "__main__":
 
     # Word2vec
     print('preprocess train_log')
-    train_log = preprocess(log_path='train_log.pkl')
+    train_log = preprocess(log_path='train_log_time_origin.pkl')
     print('preprocess test_log')
-    test_log = preprocess(is_train=False, log_path='test_log.pkl')
+    test_log = preprocess(is_train=False, log_path='test_log_time_origin.pkl')
     log = pd.concat([train_log, test_log])
     log.reset_index(drop=True, inplace=True)
     flag = 'test'
 
-    w2v(log, 'user_id', 'creative_id', flag, 64)
-    w2v(log, 'user_id', 'ad_id', flag, 64)
-    w2v(log, 'user_id', 'product_id', flag, 64)
-    w2v(log, 'user_id', 'product_category', flag, 64)
-    w2v(log, 'user_id', 'advertiser_id', flag, 64)
-    w2v(log, 'user_id', 'industry', flag, 64)
+    # print('preprocess train_log')
+    # train_log = preprocess(log_path='train_log.pkl')
+    # log = train_log
+    # flag = 'val'
+
+    # w2v(log, 'user_id', 'creative_id', flag, 128, window=5)
+    # w2v(log, 'user_id', 'ad_id', flag, 128, window=5)
+    # w2v(log, 'user_id', 'product_id', flag, 128, window=5)
+    # w2v(log, 'user_id', 'product_category', flag, 128, window=5)
+    # w2v(log, 'user_id', 'advertiser_id', flag, 128, window=5)
+    # w2v(log, 'user_id', 'industry', flag, 128, window=5)
+
+    tfidf(log, 'user_id', 'creative_id', flag, max_df=0.99, min_df=0)
+    tfidf(log, 'user_id', 'ad_id', flag, max_df=0.99, min_df=0)
+    tfidf(log, 'user_id', 'product_id', flag, max_df=0.99, min_df=0)
+    tfidf(log, 'user_id', 'product_category', flag, max_df=0.99, min_df=0)
+    tfidf(log, 'user_id', 'advertiser_id', flag, max_df=0.99, min_df=0)
+    tfidf(log, 'user_id', 'industry', flag, max_df=0.99, min_df=0)

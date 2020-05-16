@@ -17,6 +17,7 @@ class Model(BaseModel):
             self.best_score = 0
         self.build_graph(hparams)
         self.optimizer(hparams)
+
         params = tf.trainable_variables()
         utils.print_out("# Trainable variables")
         for param in params:
@@ -25,8 +26,20 @@ class Model(BaseModel):
     def set_Session(self, sess):
         self.sess = sess
 
+    # =======================================================================================================================
+    # =======================================================================================================================
+
     def build_graph(self, hparams):
+        """
+        Build Model
+
+        """
+        # init
         self.initializer = self._get_initializer(hparams)
+
+        ###############################################################################
+        # Input placeholder
+        ###############################################################################
         self.label = tf.placeholder(shape=(None), dtype=tf.float32)
         self.use_norm = tf.placeholder(tf.bool)
         self.features = tf.placeholder(shape=(None, hparams.feature_nums), dtype=tf.int32)
@@ -64,6 +77,7 @@ class Model(BaseModel):
         exfm_logit = self._build_extreme_FM(hparams, emb_inp_v2, res=False, direct=False, bias=False, reduce_D=False,
                                             f_dim=2)[:, 0]
 
+        # output
         logit = lr_logits + dnn_logits + exfm_logit
         self.prob = tf.sigmoid(logit)
         logit_1 = tf.log(self.prob + 1e-20)
@@ -72,7 +86,14 @@ class Model(BaseModel):
         self.cost = -(self.label * logit_1 + (1 - self.label) * logit_0)
         self.saver = tf.train.Saver()
 
+    # =======================================================================================================================
+    # =======================================================================================================================
+
     def _build_extreme_FM(self, hparams, nn_input, res=False, direct=False, bias=False, reduce_D=False, f_dim=2):
+        """
+        Build Extreme Factorization Machine
+
+        """
         hidden_nn_layers = []
         field_nums = []
         final_len = 0
@@ -180,13 +201,8 @@ class Model(BaseModel):
 
             return exFM_out
 
-    def optimizer(self, hparams):
-        opt = self._build_train_opt(hparams)
-        params = tf.trainable_variables()
-        gradients = tf.gradients(self.loss, params, colocate_gradients_with_ops=True)
-        clipped_grads, gradient_norm = tf.clip_by_global_norm(gradients, 5.0)
-        self.grad_norm = gradient_norm
-        self.update = opt.apply_gradients(zip(clipped_grads, params))
+    # =======================================================================================================================
+    # =======================================================================================================================
 
     def train(self, train_data, dev_data):
         hparams = self.hparams

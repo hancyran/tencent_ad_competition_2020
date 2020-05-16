@@ -53,16 +53,16 @@ def main(_):
         cross_hash_num=int(5e6),
         single_hash_num=int(5e6),
         multi_hash_num=int(1e6),
-        batch_size=32,
+        batch_size=1024,
         infer_batch_size=2 ** 14,
         optimizer="adam",
         dropout=0,
         kv_batch_num=20,
-        learning_rate=0.0002,
-        num_display_steps=1000,  # every number of steps to display results
+        learning_rate=0.00005,
+        num_display_steps=100,  # every number of steps to display results
         num_save_steps=1000,  # every number of steps to save model
-        num_eval_steps=1000,  # every number of steps to evaluate model
-        epoch=1,  # train epoch
+        num_eval_steps=2000,  # every number of steps to evaluate model
+        epoch=10,  # train epoch
         metric='softmax_loss',
         activation=['relu', 'relu', 'relu'],
         init_method='tnormal',
@@ -74,8 +74,8 @@ def main(_):
         dense_features=feats.dense_features,
         kv_features=None,
         label=feats.label_features,
-        label_dim=1,  # output label dim (gender - 1, age - 4, age_all - 10)
-        label_name='gender',
+        label_dim=4,  # output label dim (gender - 1, age - 4, age_all - 10)
+        label_name='age',
         model_name=cfg.model,
         checkpoint_dir=os.path.join(cfg.data_path, FLAGS.log_dir)
     )
@@ -84,7 +84,7 @@ def main(_):
     ####################################################################################
 
     if FLAGS.mode == 'train':
-        # read train data
+        # read data
         train_log = read_all_feature_data(feats, label_name=hparam.label_name)
 
         # build model
@@ -93,8 +93,13 @@ def main(_):
         # train model
         model.train(train_log, None)
 
-        # read test data
-        test_log = read_all_feature_data(feats, mode='test', label_name=hparam.label_name)
+    ####################################################################################
+    elif FLAGS.mode == 'test':
+        # read data
+        test_log = read_all_feature_data(feats, mode='test')
+
+        # build model
+        model = model_utils.build_model(hparam)
 
         # infer model
         preds = model.infer(test_log)  # shape: [length, 20]
@@ -143,7 +148,7 @@ def main(_):
     ####################################################################################
     elif FLAGS.mode == 'val':
         # read data
-        train_log, val_log = read_all_feature_data(feats, mode='val', label_name=hparam.label_name)
+        train_log, val_log = read_all_feature_data(feats, mode='val')
 
         # build model
         model = model_utils.build_model(hparam)
