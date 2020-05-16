@@ -10,18 +10,24 @@ import word2vec
 
 import utils.misc_utils as utils
 from model.BiLstm import BiLstm
+from utils import model_utils
+from utils.data_utils import read_all_feature_data, output_labels_v2, output_labels_v3
 from utils.feature_utils import Features
 from utils.config_utils import Config
 
 cfg = Config()
 
-FLAGS = tf.app.flags.FLAGS
-tf.app.flags.DEFINE_string("ckpt_dir", "biLstm_text_relation_checkpoint/", "checkpoint location for the model")
-tf.app.flags.DEFINE_integer("num_epochs", 20, "embedding size")
-tf.app.flags.DEFINE_string("word2vec_model_path", "zhihu-word2vec.bin-100", "word2vec's vocabulary and vectors")
+np.random.seed(cfg.seed)
+os.environ["CUDA_VISIBLE_DEVICES"] = "{0}".format(cfg.gpu)
 
+flags = tf.app.flags
+flags.DEFINE_string("mode", "train", "type of operation [train, val, test, pred]")
+flags.DEFINE_string("log_dir", "log", "path to save model")
+FLAGS = flags.FLAGS
 
-# 1.load data(X:list of lint,y:int). 2.create session. 3.feed data. 4.training (5.validation) ,(6.prediction)
+flags.DEFINE_string("ckpt_dir", "biLstm_text_relation_checkpoint/", "checkpoint location for the model")
+flags.DEFINE_string("word2vec_model_path", "zhihu-word2vec.bin-100", "word2vec's vocabulary and vectors")
+
 
 # TODO Fix it
 def main(_):
@@ -76,6 +82,56 @@ def main(_):
     utils.print_hparams(hparam)
 
     ####################################################################################
+    if FLAGS.mode == 'train':
+        # read train data
+        train_log = read_all_feature_data(feats, label_name=hparam.label_name)
+
+        # build model
+        model = model_utils.build_model(hparam)
+
+        # train model
+        model.train(train_log, None)
+
+        # read test data
+        test_log = read_all_feature_data(feats, mode='test', label_name=hparam.label_name)
+
+        # infer model
+        preds = model.infer(test_log)  # shape: [length, 20]
+
+        if hparam.label_name == 'age':
+            _ = output_labels_v2(test_log, preds, pred_path=os.path.join(cfg.data_path, FLAGS.log_dir, 'preds.csv'))
+        elif hparam.label_name == 'gender':
+            _ = output_labels_v3(test_log, preds, pred_path=os.path.join(cfg.data_path, FLAGS.log_dir, 'preds.csv'))
+
+    ####################################################################################
+    elif FLAGS.mode == 'val':
+        # read data
+        train_log, val_log = read_all_feature_data(feats, mode='val', label_name=hparam.label_name)
+
+        # build model
+        model = model_utils.build_model(hparam)
+
+        # train model
+        model.train(train_log, None, is_val=True)
+
+        # infer model
+        preds = model.infer(val_log)  # shape: [length, 20]
+
+        if hparam.label_name == 'age':
+            val_log = output_labels_v2(
+                val_log, preds, pred_path=os.path.join(cfg.data_path, FLAGS.log_dir, 'val_preds.csv'), is_train=True)
+        elif hparam.label_name == 'gender':
+            val_log = output_labels_v3(
+                val_log, preds, pred_path=os.path.join(cfg.data_path, FLAGS.log_dir, 'val_preds.csv'), is_train=True)
+
+        # print results
+        age_acc = sum((val_log.age == val_log.predicted_age).astype(np.int)) / len(val_log)
+        gender_acc = sum((val_log.gender == val_log.predicted_gender).astype(np.int)) / len(val_log)
+
+        print("Final Age Accuracy: %.4f" % age_acc)
+        print("Final Gender Accuracy: %.4f" % gender_acc)
+
+    # ####################################################################################
     # 1.load data(X:list of lint,y:int).
     # if os.path.exists(FLAGS.cache_path):  # 如果文件系统中存在，那么加载故事（词汇表索引化的）
     #    with open(FLAGS.cache_path, 'r') as data_f:
@@ -135,7 +191,7 @@ def main(_):
         # 3.feed data & training
         number_of_training_data = len(trainX)
         batch_size = FLAGS.batch_size
-        for epoch in range(curr_epoch, FLAGS.num_epochs):
+        for epoch in range(curr_epoch, hparam.epoch):
             loss, acc, counter = 0.0, 0.0, 0
             for start, end in zip(range(0, number_of_training_data, batch_size),
                                   range(batch_size, number_of_training_data, batch_size)):
@@ -166,9 +222,6 @@ def main(_):
                     os.mkdir(FLAGS.ckpt_dir)
                 saver.save(sess, save_path, global_step=epoch)
 
-        # 5.最后在测试集上做测试，并报告测试准确率 Test
-        test_loss, test_acc = do_eval(sess, biLstmTR, testX, testY, batch_size, vocabulary_index2word_label)
-    pass
 
 
 def assign_pretrained_word_embedding(sess, vocabulary_index2word, vocab_size, textRNN, word2vec_model_path=None):
@@ -205,51 +258,6 @@ def assign_pretrained_word_embedding(sess, vocabulary_index2word, vocab_size, te
     print("using pre-trained word emebedding.ended...")
 
 
-# 在验证集上做验证，报告损失、精确度
-def do_eval(sess, biLstmTR, evalX, evalY, batch_size, vocabulary_index2word_label):
-    number_examples = len(evalX)
-    eval_loss, eval_acc, eval_counter = 0.0, 0.0, 0
-    for start, end in zip(range(0, number_examples, batch_size), range(batch_size, number_examples, batch_size)):
-        curr_eval_loss, logits, curr_eval_acc = sess.run([biLstmTR.loss_val, biLstmTR.logits, biLstmTR.accuracy],
-                                                         # curr_eval_acc--->textCNN.accuracy
-                                                         feed_dict={biLstmTR.input_x: evalX[start:end],
-                                                                    biLstmTR.input_y: evalY[start:end],
-                                                                    biLstmTR.dropout_keep_prob: 1})
-        # label_list_top5 = get_label_using_logits(logits_[0], vocabulary_index2word_label)
-        # curr_eval_acc=calculate_accuracy(list(label_list_top5), evalY[start:end][0],eval_counter)
-        eval_loss, eval_acc, eval_counter = eval_loss + curr_eval_loss, eval_acc + curr_eval_acc, eval_counter + 1
-    return eval_loss / float(eval_counter), eval_acc / float(eval_counter)
-
-
-# 从logits中取出前五 get label using logits
-def get_label_using_logits(logits, vocabulary_index2word_label, top_number=1):
-    # print("get_label_using_logits.logits:",logits) #1-d array: array([-5.69036102, -8.54903221, -5.63954401, ..., -5.83969498,-5.84496021, -6.13911009], dtype=float32))
-    index_list = np.argsort(logits)[-top_number:]
-    index_list = index_list[::-1]
-    # label_list=[]
-    # for index in index_list:
-    #    label=vocabulary_index2word_label[index]
-    #    label_list.append(label) #('get_label_using_logits.label_list:', [u'-3423450385060590478', u'2838091149470021485', u'-3174907002942471215', u'-1812694399780494968', u'6815248286057533876'])
-    return index_list
-
-
-# 统计预测的准确率
-def calculate_accuracy(labels_predicted, labels, eval_counter):
-    label_nozero = []
-    # print("labels:",labels)
-    labels = list(labels)
-    for index, label in enumerate(labels):
-        if label > 0:
-            label_nozero.append(index)
-    if eval_counter < 2:
-        print("labels_predicted:", labels_predicted, " ;labels_nozero:", label_nozero)
-    count = 0
-    label_dict = {x: x for x in label_nozero}
-    for label_predict in labels_predicted:
-        flag = label_dict.get(label_predict, None)
-    if flag is not None:
-        count = count + 1
-    return count / len(labels)
 
 
 if __name__ == "__main__":
