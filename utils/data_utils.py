@@ -99,7 +99,6 @@ def combine_log(ads, log, users=None, is_train=True, save_path=None, sort_type='
     """
     Combine Log into User-Primary Log
 
-    TODO Add Click Times & Time
     """
     # merge df
     if is_train:

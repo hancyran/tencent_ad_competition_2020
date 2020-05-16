@@ -42,13 +42,7 @@ def tfidf(log, pivot_key, out_key, flag, max_df=0.99, min_df=0):
     TODO scaling size
     """
     # Fetch sentences
-    sentences = []
-    content = log[out_key].values
-    for s in content:
-        words = s.split(',')
-        if '' in words:
-            words.remove('')
-        sentences.append(words)
+    sentences = log[out_key].values
 
     model = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b", max_df=max_df, min_df=min_df).fit(sentences)
 
