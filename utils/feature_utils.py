@@ -105,11 +105,16 @@ def w2v(log, pivot_key, out_key, flag, size=128, window=10, iter=10):
         sentences.append(words)
 
     # Build Word Bag
-    values = []
-    for i in sentences:
-        values.extend(i)
-    values = set(values)
-    
+    if out_key == 'ad_id':
+        values = cfg.excluded_ad_id
+    elif out_key == 'creative_id':
+        values = cfg.excluded_creative_id
+    else:
+        values = []
+        for i in sentences:
+            values.extend(i)
+        values = set(values)
+
     # Train Word2Vec Model
     print('training...')
     random.shuffle(sentences)
