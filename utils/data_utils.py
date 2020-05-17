@@ -1,5 +1,9 @@
+import copy
 import json
 import os
+import random
+
+import gc
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -9,6 +13,8 @@ from utils.outlier_utils import Outliers
 from utils.config_utils import Config
 
 cfg = Config()
+
+random.seed(cfg.seed)
 
 
 ###############################################################################
@@ -62,7 +68,7 @@ def preprocess(is_train=True, is_split=False, log_path=None):
         return user_log
 
 
-def read_train_raw_data(root_path='train_preliminary'):
+def read_train_raw_data(root_path='train_preliminary', add_click=False):
     """
     Read Train Raw Data
 
@@ -76,10 +82,13 @@ def read_train_raw_data(root_path='train_preliminary'):
     ads.product_id = ads.product_id.astype(np.int64)
     ads.industry = ads.industry.astype(np.int64)
 
+    if add_click:
+        log = process_log(log)
+
     return users, ads, log
 
 
-def read_test_raw_data(root_path='test'):
+def read_test_raw_data(root_path='test', add_click=False):
     """
     Read Test Raw Data
 
@@ -92,7 +101,40 @@ def read_test_raw_data(root_path='test'):
     ads.product_id = ads.product_id.astype(np.int64)
     ads.industry = ads.industry.astype(np.int64)
 
+    if add_click:
+        log = process_log(log)
+
     return ads, log
+
+
+def process_log(log):
+    """
+    Append click_times*row
+
+    """
+    creative_id_list = [','.join([str(ids)] * time) for ids, time in
+                        zip(log['creative_id'].values, log['click_times'].values)]
+    ad_id_list = [','.join([str(ids)] * time) for ids, time in zip(log['ad_id'].values, log['click_times'].values)]
+    product_id_list = [','.join([str(ids)] * time) for ids, time in
+                       zip(log['product_id'].values, log['click_times'].values)]
+    product_category_list = [','.join([str(ids)] * time) for ids, time in
+                             zip(log['product_category'].values, log['click_times'].values)]
+    advertiser_id_list = [','.join([str(ids)] * time) for ids, time in
+                          zip(log['advertiser_id'].values, log['click_times'].values)]
+    industry_list = [','.join([str(ids)] * time) for ids, time in
+                     zip(log['industry'].values, log['click_times'].values)]
+
+    log['creative_id'] = creative_id_list
+    log['ad_id'] = ad_id_list
+    log['product_id'] = product_id_list
+    log['product_category'] = product_category_list
+    log['advertiser_id'] = advertiser_id_list
+    log['industry'] = industry_list
+
+    del creative_id_list, ad_id_list, product_id_list, product_category_list, advertiser_id_list, industry_list
+    gc.collect()
+
+    return log
 
 
 def combine_log(ads, log, users=None, is_train=True, save_path=None, sort_type='time'):
@@ -204,6 +246,84 @@ def combine_log(ads, log, users=None, is_train=True, save_path=None, sort_type='
 
     if save_path:
         user_log.to_pickle(os.path.join(cfg.data_path, save_path))
+
+    return user_log
+
+
+def combine_log_v2(ads, log, users=None, is_train=True, save_path=None):
+    """
+    Combine Log into User-Primary Log (Click + Time)
+
+    """
+    # merge df
+    if is_train:
+        merged_log = pd.merge(log, users, on='user_id')
+        merged_log = pd.merge(merged_log, ads, on='creative_id')
+        merged_log = process_log(merged_log)
+    else:
+        merged_log = pd.merge(log, ads, on='creative_id')
+        merged_log = process_log(merged_log)
+
+    def combine_log(merged_log):
+        # combine id into one sequence
+        def combine_id_time_remove_0(x):
+            id_str = ','.join(x)
+            id_list = id_str.split(',')
+            while '0' in id_list:
+                id_list.remove('0')
+            random.shuffle(id_list)
+            return ','.join(id_list)
+
+        def combine_id_time(x):
+            id_str = ','.join(x)
+            id_list = id_str.split(',')
+            random.shuffle(id_list)
+            return ','.join(id_list)
+
+        def combine_id_user(x):
+            return ','.join(x)
+
+        # creative_id
+        combined_log = merged_log[['user_id', 'time', 'creative_id']].groupby(['user_id', 'time']).agg(
+            {'creative_id': combine_id_time}).groupby(['user_id']).agg({'creative_id': combine_id_user})
+        user_log = combined_log.reset_index()
+        # ad_id
+        combined_log = merged_log[['user_id', 'time', 'ad_id']].groupby(['user_id', 'time']).agg(
+            {'ad_id': combine_id_time}).groupby(['user_id']).agg({'ad_id': combine_id_user})
+        user_log = pd.merge(user_log, combined_log.reset_index(), on='user_id')
+        # product_id
+        combined_log = merged_log[['user_id', 'time', 'product_id']].groupby(['user_id', 'time']).agg(
+            {'product_id': combine_id_time_remove_0}).groupby(['user_id']).agg({'product_id': combine_id_user})
+        user_log = pd.merge(user_log, combined_log.reset_index(), on='user_id')
+        # product_category
+        combined_log = merged_log[['user_id', 'time', 'product_category']].groupby(['user_id', 'time']).agg(
+            {'product_category': combine_id_time}).groupby(['user_id']).agg({'product_category': combine_id_user})
+        user_log = pd.merge(user_log, combined_log.reset_index(), on='user_id')
+        # advertiser_id
+        combined_log = merged_log[['user_id', 'time', 'advertiser_id']].groupby(['user_id', 'time']).agg(
+            {'advertiser_id': combine_id_time}).groupby(['user_id']).agg({'advertiser_id': combine_id_user})
+        user_log = pd.merge(user_log, combined_log.reset_index(), on='user_id')
+        # industry
+        combined_log = merged_log[['user_id', 'time', 'industry']].groupby(['user_id', 'time']).agg(
+            {'industry': combine_id_time_remove_0}).groupby(['user_id']).agg({'industry': combine_id_user})
+        user_log = pd.merge(user_log, combined_log.reset_index(), on='user_id')
+
+        return user_log
+
+    # sort by time
+    merged_log.sort_values(by='time', inplace=True)
+    merged_log.reset_index(inplace=True, drop=True)
+    user_log = combine_log(merged_log)
+
+    # merge labels
+    if is_train:
+        user_log = pd.merge(user_log, users, on=['user_id'])
+
+    if save_path:
+        user_log.to_pickle(os.path.join(cfg.data_path, save_path))
+
+    del ads, log, users, merged_log
+    gc.collect()
 
     return user_log
 
@@ -561,12 +681,10 @@ if __name__ == '__main__':
     users, ads, log = read_train_raw_data()
 
     print('Combine User Log')
-    _ = combine_log(ads, log, users, is_train=True, sort_type='time',
-                    save_path='train_log_time_origin.pkl')
+    _ = combine_log_v2(ads, log, users, is_train=True, save_path='train_log_time_click_time_sequence.pkl')
 
     print('Read Raw Data')
     ads, log = read_test_raw_data()
 
     print('Combine User Log')
-    _ = combine_log(ads, log, is_train=False, sort_type='time',
-                    save_path='test_log_time_origin.pkl')
+    _ = combine_log_v2(ads, log, is_train=False, save_path='test_log_time_click_time_sequence.pkl')

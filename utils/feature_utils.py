@@ -21,6 +21,7 @@ from utils.data_utils import preprocess
 from utils.config_utils import Config
 
 from sklearn.feature_extraction.text import TfidfVectorizer
+import scipy.io as scio
 
 cfg = Config()
 
@@ -30,36 +31,45 @@ random.seed(cfg.seed)
 """
 Feature Extraction Tools
 
-TF-IDF + W2V + Multi-label + Onehot
+TF-IDF + W2V + Multi-label + Onehot + Click multiply + Time Sequence + Shuffle
 
 """
 
 
-def tfidf(log, pivot_key, out_key, flag, max_df=0.99, min_df=0):
+def tfidf(log, pivot_key, out_key, flag, max_df=0.99):
     """
     TF-IDF Features
 
-    TODO scaling size
+    creative_id - (1899993, 2086586) -> (1899993, 309296) over20 -> (1899993, 218991) over20
+    ad_id - (1899993, 1977177) -> (1899993, 309179) over20 -> (1899993, 219129) over20
+    product_id - (1899993, 39015)
+    product_category - (1899993, 18)
+    advertiser_id - (1899993, 57841)
+    industry - (1899993, 332)
+
     """
+
+    print('word2vec %s on %s' % (out_key, pivot_key))
     # Fetch sentences
     sentences = log[out_key].values
 
-    model = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b", max_df=max_df, min_df=min_df).fit(sentences)
+    # Word bag
+    if out_key == 'ad_id':
+        values = cfg.excluded_ad_id
+    elif out_key == 'creative_id':
+        values = cfg.excluded_creative_id
+    else:
+        values = None
+
+    # Train TF-IDF Model
+    model = TfidfVectorizer(token_pattern=r"(?u)\b\w+\b", max_df=max_df, min_df=0, vocabulary=values).fit(sentences)
 
     # Output
-    tfidf_results = model.transform(sentences).toarray()
+    tfidf_results = model.transform(sentences)
 
     # Save
-    print('saving...')
-    out_df = pd.DataFrame(tfidf_results)
-    names = [out_key]
-    size = len(tfidf_results)
-    print('Total Size: %d' % size)
-    for i in range(size):
-        names.append(pivot_key + '_tfidf_embedding_' + out_key + '_' + str(i))
-    out_df.columns = names
-    out_df.to_pickle(
-        os.path.join(cfg.data_path, pivot_key + '_' + out_key + '_' + flag + '_tfidf.pkl'))
+    print(tfidf_results.shape)
+    scio.savemat('%s_%s_%s_tfidf.mat' % (pivot_key, out_key, flag), {'mat': tfidf_results})
 
 
 def w2v(log, pivot_key, out_key, flag, size=128, window=10, iter=10):
@@ -512,6 +522,13 @@ def history(train_df, test_df, log, pivot_key, minor_key):
 
 class Features:
     def __init__(self):
+        """
+        creative_id: 2086586
+        ad_id: 1977177
+        advertiser_id: 50544
+        product_id: 31581
+
+        """
         # label
         self.label_features = ['label_' + str(i) for i in range(1)]  # gender
         # self.label_features = ['label_' + str(i) for i in range(4)]  # age
