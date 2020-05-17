@@ -15,8 +15,8 @@ class Config:
 
         if os.path.exists(os.path.join(self.data_path, 'excluded_id_over20.mat')):
             ids = scio.loadmat(os.path.join(self.data_path, 'excluded_id.mat'))
-            self.excluded_creative_id = ids['excluded_creative_id']
-            self.excluded_ad_id = ids['excluded_ad_id']
-            self.excluded_advertiser_id = ids['excluded_advertiser_id']
-            self.excluded_product_id = ids['excluded_product_id']
-            self.excluded_industry = ids['excluded_industry']
+            self.excluded_creative_id = ids['excluded_creative_id'][0]
+            self.excluded_ad_id = ids['excluded_ad_id'][0]
+            self.excluded_advertiser_id = ids['excluded_advertiser_id'][0]
+            self.excluded_product_id = ids['excluded_product_id'][0]
+            self.excluded_industry = ids['excluded_industry'][0]
