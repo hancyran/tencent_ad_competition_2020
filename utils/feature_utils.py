@@ -109,7 +109,7 @@ def w2v(log, pivot_key, out_key, flag, size=128, window=10, iter=10):
     for i in sentences:
         values.extend(i)
     values = set(values)
-
+    
     # Train Word2Vec Model
     print('training...')
     random.shuffle(sentences)
@@ -666,9 +666,9 @@ if __name__ == "__main__":
 
     # Word2vec
     print('preprocess train_log')
-    train_log = preprocess(log_path='train_log_time_origin.pkl')
+    train_log = preprocess(log_path='train_log_time_click_time_sequence.pkl')
     print('preprocess test_log')
-    test_log = preprocess(is_train=False, log_path='test_log_time_origin.pkl')
+    test_log = preprocess(is_train=False, log_path='test_log_time_click_time_sequence.pkl')
     log = pd.concat([train_log, test_log])
     log.reset_index(drop=True, inplace=True)
     flag = 'test'
@@ -685,9 +685,9 @@ if __name__ == "__main__":
     w2v(log, 'user_id', 'advertiser_id', flag, 128, window=10)
     w2v(log, 'user_id', 'industry', flag, 128, window=10)
 
-    # tfidf(log, 'user_id', 'creative_id', flag, max_df=0.99, min_df=0)
-    # tfidf(log, 'user_id', 'ad_id', flag, max_df=0.99, min_df=0)
-    # tfidf(log, 'user_id', 'product_id', flag, max_df=0.99, min_df=0)
-    # tfidf(log, 'user_id', 'product_category', flag, max_df=0.99, min_df=0)
-    # tfidf(log, 'user_id', 'advertiser_id', flag, max_df=0.99, min_df=0)
-    # tfidf(log, 'user_id', 'industry', flag, max_df=0.99, min_df=0)
+    # tfidf(log, 'user_id', 'creative_id', flag, max_df=0.99)
+    # tfidf(log, 'user_id', 'ad_id', flag, max_df=0.99)
+    # tfidf(log, 'user_id', 'product_id', flag, max_df=0.99)
+    # tfidf(log, 'user_id', 'product_category', flag, max_df=0.99)
+    # tfidf(log, 'user_id', 'advertiser_id', flag, max_df=0.99)
+    # tfidf(log, 'user_id', 'industry', flag, max_df=0.99)
