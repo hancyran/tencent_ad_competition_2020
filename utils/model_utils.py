@@ -1,4 +1,4 @@
-from model import CIN, xdeepfm, BiLstm, AttBiLstm
+from model import CIN, xdeepfm, BiLstm, AttBiLstm, MultiLayerBiLstm, bircnn, cnn
 import tensorflow as tf
 
 
@@ -12,6 +12,12 @@ def build_model(hparams):
         model = AttBiLstm.Model(hparams)
     elif hparams.model == 'bert':
         model = AttBiLstm.Model(hparams)
+    elif hparams.model == 'MultiLayerBiLstm':
+        model = MultiLayerBiLstm.Model(hparams)
+    elif hparams.model == 'bircnn':
+        model = bircnn.Model(hparams)
+    elif hparams.model == 'cnn':
+        model = cnn.Model(hparams)
     else:
         raise Exception('[!] No Such Type of Model')
 

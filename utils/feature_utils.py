@@ -106,19 +106,26 @@ def w2v(log, pivot_key, out_key, flag, size=128, window=10, iter=10):
 
     # Build Word Bag
     if out_key == 'ad_id':
-        values = cfg.excluded_ad_id
+        values = set(cfg.excluded_ad_id)
+        # Train Word2Vec Model
+        print('training...')
+        random.shuffle(sentences)
+        model = Word2Vec(sentences, size=size, window=window, min_count=21, workers=10, iter=iter)
     elif out_key == 'creative_id':
-        values = cfg.excluded_creative_id
+        values = set(cfg.excluded_creative_id)
+        # Train Word2Vec Model
+        print('training...')
+        random.shuffle(sentences)
+        model = Word2Vec(sentences, size=size, window=window, min_count=21, workers=10, iter=iter)
     else:
         values = []
         for i in sentences:
             values.extend(i)
         values = set(values)
-
-    # Train Word2Vec Model
-    print('training...')
-    random.shuffle(sentences)
-    model = Word2Vec(sentences, size=size, window=window, min_count=1, workers=10, iter=iter)
+        # Train Word2Vec Model
+        print('training...')
+        random.shuffle(sentences)
+        model = Word2Vec(sentences, size=size, window=window, min_count=1, workers=10, iter=iter)
 
     # Output
     print('outputing...')
@@ -556,21 +563,24 @@ class Features:
         # self.multi_features += ['ad_id_click_top2', 'ad_id_click_top8']
         # self.multi_features += ['creative_id_click_top6', 'creative_id_click_top10']
 
-        # onehot feats
-        self.multi_features += ['product_category_onehot', 'industry_onehot']
-
         # word2vec
-        self.dense_features = ['user_id_w2v_embedding_ad_id_128_' + str(i) for i in range(128)] + \
+        self.dense_features = ['user_id_w2v_embedding_creative_id_128_' + str(i) for i in range(128)] + \
+                              ['user_id_w2v_embedding_ad_id_128_' + str(i) for i in range(128)] + \
                               ['user_id_w2v_embedding_product_id_128_' + str(i) for i in range(128)] + \
                               ['user_id_w2v_embedding_product_category_128_' + str(i) for i in range(128)] + \
                               ['user_id_w2v_embedding_advertiser_id_128_' + str(i) for i in range(128)] + \
                               ['user_id_w2v_embedding_industry_128_' + str(i) for i in range(128)]
 
-        self.dense_features += ['user_id_tfidf_embedding_ad_id_' + str(i) for i in range(64)] + \
-                               ['user_id_tfidf_embedding_product_id_' + str(i) for i in range(64)] + \
-                               ['user_id_tfidf_embedding_product_category_' + str(i) for i in range(64)] + \
-                               ['user_id_tfidf_embedding_advertiser_id_' + str(i) for i in range(64)] + \
-                               ['user_id_tfidf_embedding_industry_' + str(i) for i in range(64)]
+        # tfidf
+        self.dense_features += ['user_id_tfidf_embedding_creative_id_' + str(i) for i in range(309296)] + \
+                               ['user_id_tfidf_embedding_ad_id_' + str(i) for i in range(309296)] + \
+                               ['user_id_tfidf_embedding_product_id_' + str(i) for i in range(39014)] + \
+                               ['user_id_tfidf_embedding_product_category_' + str(i) for i in range(18)] + \
+                               ['user_id_tfidf_embedding_advertiser_id_' + str(i) for i in range(57841)] + \
+                               ['user_id_tfidf_embedding_industry_' + str(i) for i in range(331)]
+
+        # onehot
+        self.multi_features += ['product_category_onehot', 'industry_onehot']
 
         # self.dense_features += ['user_id_w2v_embedding_ad_id_64_' + str(i) for i in range(64)] + \
         #                        ['user_id_w2v_embedding_product_id_64_' + str(i) for i in range(64)] + \
