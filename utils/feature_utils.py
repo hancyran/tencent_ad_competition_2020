@@ -40,12 +40,12 @@ def tfidf(log, pivot_key, out_key, flag, max_df=0.99):
     """
     TF-IDF Features
 
-    creative_id - (1899993, 2086586) -> (1899993, 309296) over20 -> (1899993, 218991) over20
-    ad_id - (1899993, 1977177) -> (1899993, 309179) over20 -> (1899993, 219129) over20
-    product_id - (1899993, 39015)
+    creative_id - (1899993, 2086586) -> (1899993, 309296) over20 -> (1899993, 218991) over30
+    ad_id - (1899993, 1977177) -> (1899993, 309179) over20 -> (1899993, 219129) over30
+    product_id - (1899993, 39014)
     product_category - (1899993, 18)
     advertiser_id - (1899993, 57841)
-    industry - (1899993, 332)
+    industry - (1899993, 331)
 
     """
 
@@ -678,16 +678,16 @@ if __name__ == "__main__":
     # log = train_log
     # flag = 'val'
 
-    # w2v(log, 'user_id', 'creative_id', flag, 128, window=5)
-    # w2v(log, 'user_id', 'ad_id', flag, 128, window=5)
-    # w2v(log, 'user_id', 'product_id', flag, 128, window=5)
-    # w2v(log, 'user_id', 'product_category', flag, 128, window=5)
-    # w2v(log, 'user_id', 'advertiser_id', flag, 128, window=5)
-    # w2v(log, 'user_id', 'industry', flag, 128, window=5)
+    w2v(log, 'user_id', 'creative_id', flag, 128, window=10)
+    w2v(log, 'user_id', 'ad_id', flag, 128, window=10)
+    w2v(log, 'user_id', 'product_id', flag, 128, window=10)
+    w2v(log, 'user_id', 'product_category', flag, 128, window=10)
+    w2v(log, 'user_id', 'advertiser_id', flag, 128, window=10)
+    w2v(log, 'user_id', 'industry', flag, 128, window=10)
 
-    tfidf(log, 'user_id', 'creative_id', flag, max_df=0.99, min_df=0)
-    tfidf(log, 'user_id', 'ad_id', flag, max_df=0.99, min_df=0)
-    tfidf(log, 'user_id', 'product_id', flag, max_df=0.99, min_df=0)
-    tfidf(log, 'user_id', 'product_category', flag, max_df=0.99, min_df=0)
-    tfidf(log, 'user_id', 'advertiser_id', flag, max_df=0.99, min_df=0)
-    tfidf(log, 'user_id', 'industry', flag, max_df=0.99, min_df=0)
+    # tfidf(log, 'user_id', 'creative_id', flag, max_df=0.99, min_df=0)
+    # tfidf(log, 'user_id', 'ad_id', flag, max_df=0.99, min_df=0)
+    # tfidf(log, 'user_id', 'product_id', flag, max_df=0.99, min_df=0)
+    # tfidf(log, 'user_id', 'product_category', flag, max_df=0.99, min_df=0)
+    # tfidf(log, 'user_id', 'advertiser_id', flag, max_df=0.99, min_df=0)
+    # tfidf(log, 'user_id', 'industry', flag, max_df=0.99, min_df=0)

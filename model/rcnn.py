@@ -127,7 +127,6 @@ class TextRCNN:
         #print("output:",output)
         return output
 
-
     def inference(self):
         """main computation graph here: 1. embeddding layer, 2.Bi-LSTM layer, 3.max pooling, 4.FC layer 5.softmax """
         #1.get emebedding of words in the sentence

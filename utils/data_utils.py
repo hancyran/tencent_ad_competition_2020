@@ -315,6 +315,15 @@ def combine_log_v2(ads, log, users=None, is_train=True, save_path=None):
     merged_log.reset_index(inplace=True, drop=True)
     user_log = combine_log(merged_log)
 
+    def remove_null(x):
+        l = x.split(',')
+        while '' in l:
+            l.remove('')
+        return ','.join(l)
+    # remove comma
+    user_log['product_id'] = user_log['product_id'].apply(lambda x: remove_null(x))
+    user_log['industry'] = user_log['industry'].apply(lambda x: remove_null(x))
+
     # merge labels
     if is_train:
         user_log = pd.merge(user_log, users, on=['user_id'])
@@ -370,7 +379,7 @@ def read_all_feature_data(feats, mode='train', label_name='age'):
     """
     if mode == 'train':
         if not os.path.exists(os.path.join(cfg.data_path, 'train_log_NN_v2.pkl')):
-            train_log = preprocess(log_path='train_log_time_origin.pkl')
+            train_log = preprocess(log_path='train_log_time_click_time_sequence.pkl')
 
             # add w2v features
             for multi_feat in feats.multi_features:
@@ -412,7 +421,7 @@ def read_all_feature_data(feats, mode='train', label_name='age'):
 
     elif mode == 'test':
         if not os.path.exists(os.path.join(cfg.data_path, 'test_log_NN_v2.pkl')):
-            test_log = preprocess(is_train=False, log_path='test_log_time_origin.pkl')
+            test_log = preprocess(is_train=False, log_path='test_log_time_click_time_sequence.pkl')
 
             # add w2v features
             for multi_feat in feats.multi_features:
@@ -441,7 +450,7 @@ def read_all_feature_data(feats, mode='train', label_name='age'):
 
     elif mode == 'val':
         if not os.path.exists(os.path.join(cfg.data_path, 'train_train_log_NN_v2.pkl')):
-            train_log, val_log = preprocess(log_path='train_log_time_origin.pkl', is_split=True)
+            train_log, val_log = preprocess(log_path='train_log_time_click_time_sequence.pkl', is_split=True)
 
             # add w2v features
             for multi_feat in feats.multi_features:
