@@ -14,7 +14,7 @@ class Config:
         self.model = 'CIN'
 
         if os.path.exists(os.path.join(self.data_path, 'excluded_id_over20.mat')):
-            ids = scio.loadmat(os.path.join(self.data_path, 'excluded_id.mat'))
+            ids = scio.loadmat(os.path.join(self.data_path, 'excluded_id_over20.mat'))
             self.excluded_creative_id = ids['excluded_creative_id'][0]
             self.excluded_ad_id = ids['excluded_ad_id'][0]
             self.excluded_advertiser_id = ids['excluded_advertiser_id'][0]
