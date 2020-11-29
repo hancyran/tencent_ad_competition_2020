@@ -1,5 +1,5 @@
 # tencent2020
-腾讯算法大赛2020
+Tencent Advertising Algorithm Competition 2020
 
 ***
 # Usage
